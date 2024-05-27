@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools", "setuptools-rust"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "startracker"
+version = "0.1.0"
+dependencies = ["numpy>=1.20.0"]
+requires-python = ">= 3.8"
+authors = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
+maintainers = [{ name = "Steven Michael", email = "ssmichael@gmail.com" }]
+readme = "README.md"
+description = "Star Tracker"
+keywords = [
+    "startracker",
+    "astronomy",
+    "camera",
+]
+classifiers = [
+    # How mature is this project? Common values are
+    #   3 - Alpha
+    #   4 - Beta
+    #   5 - Production/Stable
+    "Development Status :: 3 - Alpha",
+
+    # Pick your license as you wish (see also "license" above)
+    "License :: OSI Approved :: MIT License",
+
+    # Specify the Python versions you support here.
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[tool.setuptools.packages]
+#find = { where = ["python"] }
+
+[tool.cibuildwheel]
+build = ["cp312-*", "cp311-* cp310-* cp39-* cp38-*"]
+test-skip = "*-macosx_arm64 *-macosx_universal2:arm64"
+skip = ["pp*", "*_i686", "*_s390x", "*_aarch64", "*_ppc64le", "*-musllinux*"]
+
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+before-build = [
+    "pip install -U setuptools-rust",
+    "rustup default stable",
+    "rustup target add aarch64-apple-darwin",
+    "rustup target add x86_64-apple-darwin",
+    "rustup show",
+]
+environment = { PATH = "$PATH:$HOME/.cargo/bin" }
+# Skip trying to test arm64 builds on Intel Macs
+test-requires = "pytest"
+test-command = [
+    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
+]
+
+
+[tool.cibuildwheel.linux]
+environment = { PATH = "$PATH:$HOME/.cargo/bin" }
+archs = ["x86_64"]
+before-build = [
+    "pip install -U setuptools-rust",
+    "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y",
+    "rustup show",
+]
+test-requires = "pytest"
+test-command = [
+    "SATKIT_DATA={package}/astro-data SATKIT_TESTVEC_ROOT={package}/satkit-testvecs pytest {project}/python/test/test.py",
+]
+
+[tool.cibuildwheel.windows]
+environment = { PATH = '$UserProfile\.cargo\bin;$PATH' }
+before-build = [
+    "pip install -U setuptools-rust",
+    "rustup toolchain install stable-x86_64-pc-windows-msvc",
+    "rustup default stable-x86_64-pc-windows-msvc",
+    "rustup override set stable-x86_64-pc-windows-msvc",
+    "rustup show",
+]
+archs = ["AMD64"]
+test-requires = "pytest"
+before-test = [
+    "set SATKIT_DATA={package}\\astro-data",
+    "set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs",
+]
+test-command = [
+    "set SATKIT_DATA={package}\\astro-data&&set SATKIT_TESTVEC_ROOT={package}\\satkit-testvecs&&pytest {project}\\python\\test\\test.py",
+]
+
+
+[[tool.setuptools-rust.ext-modules]]
+args = ["--crate-type", "cdylib"]
+target = "startracker/startracker"
+path = "Cargo.toml"
+binding = "PyO3"
+py-limited-api = "auto"
