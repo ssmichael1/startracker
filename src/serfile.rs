@@ -228,13 +228,13 @@ mod tests {
     #[test]
     fn load_ser() {
         let f = SERFile::new(
-            &String::from("../stardata/2024-05-07-fixed_25mm__000007__21-33-42__data.ser")).unwrap();
+            &String::from("../stardata/2024-05-07_fixed_25mm__000007__21-33-42__data.ser")).unwrap();
         println!("f = {}", f);
         match f.frames[0] {
             CameraFrame::Mono16(ref frame) => {
                 println!("Frame: {}", frame);
                 let data = frame.as_slice();
-                let stars = find_stars(data, frame.rows(), frame.cols());
+                let stars = find_stars(data, frame.rows(), frame.cols(), None);
                 println!("Number of stars: {}", stars.len());
             },
             

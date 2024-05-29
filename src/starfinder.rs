@@ -1,9 +1,32 @@
 
 
 #[derive(Debug, Clone)]
+pub struct FindStarsOptions {
+    pub threshold: f64,
+    pub minsize: usize,
+}
+
+impl FindStarsOptions {
+    pub fn defaults() -> FindStarsOptions {
+        FindStarsOptions {
+            threshold: 2.5,
+            minsize: 2,
+        }
+    }
+}
+
+impl std::fmt::Display for FindStarsOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Options:\n")?;
+        write!(f, "               threshold: {:.2}\n", self.threshold)?;
+        write!(f, "    Minimum segment size: {} pixels", self.minsize)
+    }    
+}
+
+
+#[derive(Debug, Clone)]
 pub struct Segment {
-    pub indices: Vec<usize>,
-    pub rowcol: Vec<(usize, usize)>,
+    pub indices: Vec<(usize, usize)>,
     pub centroid: (f64, f64),
     pub mass: f64,
 }
@@ -11,8 +34,7 @@ pub struct Segment {
 impl Segment {
     pub fn new() -> Self {
         Segment {
-            indices: Vec::<usize>::new(),
-            rowcol: Vec::<(usize, usize)>::new(),
+            indices: Vec::<(usize, usize)>::new(),
             centroid: (0.0, 0.0),
             mass: 0.0,
         }
@@ -21,19 +43,25 @@ impl Segment {
 
 impl std::fmt::Display for Segment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Segment: rowcol: {:?}, centroid: {:?}, mass: {}", 
-            self.rowcol, self.centroid, self.mass)
+        write!(f, "Segment: indices: {:?}, centroid: {:?}, mass: {}", 
+            self.indices, self.centroid, self.mass)
     }
 }
 
 /// Low-level function to find the stars and report out 
 /// locations and brightnesses in the image
-pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
+pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize, options: Option<FindStarsOptions>) -> Vec<Segment>
     where T: Sized + Clone + Copy + Into<i64>
             + Into<f64> + Into<i32>
             + std::cmp::Ord
             + std::ops::Add<Output = T>
 {
+
+    let options = match options {
+        None => FindStarsOptions::defaults(),
+        Some(o) => o,
+    };
+
     let mut min: i32 = std::i32::MAX;
     let mut max: i32 = std::i32::MIN;
     let mut sum: i64 = 0;
@@ -56,7 +84,7 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
 
     let mean = sum as f64 / count as f64;
     let std_dev = ((sumsq as f64 - count as f64 * mean * mean) / (count as f64 - 1.0)).sqrt();
-    let thresh: i32 = (mean + 2.2*std_dev) as i32;
+    let thresh: i32 = (mean + options.threshold*std_dev) as i32;
 
     // Create a pixel mask to mark the pixel segments
     let mut mask: Vec<i32> = vec![-1; pix.len()];
@@ -70,8 +98,7 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
             if mask[idx] == -1 {
                 // We found a new segment
                 let mut new_segment = Segment::new();
-                new_segment.indices.push(idx);
-                new_segment.rowcol.push((idx / cols, idx % cols));
+                new_segment.indices.push((idx / cols, idx % cols));
                 mask[idx] = segment_count;
                 segment_count += 1;
                 segments.push(new_segment);
@@ -83,13 +110,12 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
                 let vright: i32 = pix[right].clone().into();
                 if mask[right] == -1 && vright > thresh {
                     mask[right] = mask[idx];
-                    segments[mask[idx] as usize].indices.push(right);
-                    segments[mask[idx] as usize].rowcol.push((right / cols, right % cols));
+                    segments[mask[idx] as usize].indices.push((right / cols, right % cols));
                 }
             }
 
             // Is there a row below?
-            if (idx / cols) < rows {
+            if (idx / cols) < (rows-1) {
                 let current_col = idx%cols;
 
                 // Check connectivity to the pixel below left
@@ -98,8 +124,7 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
                     let vbelowleft: i32 = pix[belowleft].clone().into();
                     if mask[belowleft] == -1 && vbelowleft > thresh {
                         mask[belowleft] = mask[idx];
-                        segments[mask[idx] as usize].indices.push(belowleft);
-                        segments[mask[idx] as usize].rowcol.push((belowleft / cols, belowleft % cols));
+                        segments[mask[idx] as usize].indices.push((belowleft / cols, belowleft % cols));
                     }
                 }
 
@@ -108,8 +133,7 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
                 let vbelow: i32 = pix[below].clone().into();
                 if mask[below] == -1 && vbelow > thresh {
                     mask[below] = mask[idx];
-                    segments[mask[idx] as usize].indices.push(below);
-                    segments[mask[idx] as usize].rowcol.push((below / cols, below % cols));
+                    segments[mask[idx] as usize].indices.push((below / cols, below % cols));
                 }
                 
 
@@ -119,17 +143,16 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
                     let vbelowright: i32 = pix[belowright].clone().into();
                     if mask[belowright] == -1 && vbelowright > thresh {
                         mask[belowright] = mask[idx];
-                        segments[mask[idx] as usize].indices.push(belowright);
-                        segments[mask[idx] as usize].rowcol.push((belowright / cols, belowright % cols));
+                        segments[mask[idx] as usize].indices.push((belowright / cols, belowright % cols));
                     }
                 }
             }
         }
     });
 
-    // Remove singleton segments
-    segments.retain(|x| x.indices.len() >= 2);
-
+    // Remove elements less than the minimum size in pixels
+    segments.retain(|x| x.indices.len() >= options.minsize);
+    
 
     // Calculate the centroid and mass of each segment
     segments.iter_mut().for_each(|segment| {
@@ -138,15 +161,15 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
         let mut summass = 0.0;
 
         // Find the center row and column
-        let (srow, scol) = segment.rowcol.iter().fold((0, 0), |acc, (r, c)| {
+        let (srow, scol) = segment.indices.iter().fold((0, 0), |acc, (r, c)| {
             (acc.0 + r, acc.1 + c)
         });
-        let crow = srow as f64 / segment.rowcol.len() as f64;
-        let ccol = scol as f64 / segment.rowcol.len() as f64;
+        let crow = srow as f64 / segment.indices.len() as f64;
+        let ccol = scol as f64 / segment.indices.len() as f64;
 
         // Centroid about the center row and column
         // this is important as it reduces noise in the centroid calculation
-        segment.rowcol.iter().for_each(|(row, col)| {
+        segment.indices.iter().for_each(|(row, col)| {
             let val: f64 = pix[row * cols + col].clone().into();
             sumx += val * (col.clone() as f64 - ccol);
             sumy += val * (crow.clone() as f64 - crow);
@@ -155,6 +178,11 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
         segment.centroid = (sumx / summass + ccol as f64, sumy / summass + crow as f64);
         segment.mass = summass;
     });
+    // Sort by mass (Signal)
+    segments.sort_by(|a,b| {
+        a.mass.partial_cmp(&b.mass).unwrap()
+    });
+
 
     segments
 
@@ -162,7 +190,7 @@ pub fn find_stars<T> (pix: &[T], rows: usize, cols: usize) -> Vec<Segment>
 
 #[cfg(test)]
 mod test {
-    //use super::*;
+    use super::*;
 
     #[test]
     fn test_basic() {
@@ -184,7 +212,10 @@ mod test {
             val as u16
         }).collect();
     
-        let segments = super::find_stars(&gauss, rows as usize, cols as usize);
+        let mut options = FindStarsOptions::defaults();
+        options.threshold = 503.0;
+
+        let segments = super::find_stars(&gauss, rows as usize, cols as usize, Some(options));
         println!("Found {} segments", segments.len());
         for segment in segments.iter() {
             println!("Segment: {}", segment);
